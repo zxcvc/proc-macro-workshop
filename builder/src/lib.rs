@@ -15,9 +15,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
 fn build(st:syn::DeriveInput)->syn::Result<proc_macro2::TokenStream>{
     let new_struct_ident = build_new_struct(&st)?;
     let impl_for_stuct = impl_for_old_struct(&st)?;
+    let impl_for_new_struct_setter = impl_for_new_struct_setter(&st)?;
     let ret = quote::quote!(
         #new_struct_ident
         #impl_for_stuct
+        #impl_for_new_struct_setter
     );
     Ok(ret)
 }
@@ -78,4 +80,25 @@ fn impl_for_old_struct(st:&syn::DeriveInput)->syn::Result<proc_macro2::TokenStre
         }
     );
     Ok(ret)
+}
+
+fn impl_for_new_struct_setter(st:&syn::DeriveInput)->syn::Result<proc_macro2::TokenStream>{
+    let new_struct_name = format!("{}Builder",st.ident.to_string());
+    let new_struct_ident = syn::Ident::new(&new_struct_name,st.span());
+
+    let fields = get_struct_fields(st)?;
+    let names:Vec<_> = fields.iter().map(|item|&item.ident).collect();
+    let types:Vec<_> = fields.iter().map(|item|&item.ty).collect();
+    let token_stream = quote::quote!(
+        impl #new_struct_ident{
+            #(
+                fn #names(&mut self,#names:#types)->&mut Self{
+                    self.#names = std::option::Option::Some(#names);
+                    self
+                }
+            )*
+        }
+        
+    );
+    Ok(token_stream)
 }
