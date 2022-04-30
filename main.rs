@@ -10,7 +10,8 @@ use derive_builder::Builder;
 #[derive(Builder)]
 struct A{
     pub name:String,
-    s:i32,
+    s:Option<String>,
+    a:i32,
 }
 fn main() {
 }

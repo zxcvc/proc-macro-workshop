@@ -53,7 +53,12 @@ fn build_new_struct(st:&syn::DeriveInput)->syn::Result<proc_macro2::TokenStream>
     let struct_vis = &st.vis;
     let fields = get_struct_fields(st)?;
     let names:Vec<_> = fields.iter().map(|item|&item.ident).collect();
-    let types:Vec<_> = fields.iter().map(|item|&item.ty).collect();
+    let types:Vec<_> = fields.iter().map(|item|{
+        match get_inner_type_of_option(&item.ty){
+            Some(t) => t,
+            None => &item.ty,
+        }
+    }).collect();
     let vis:Vec<_> = fields.iter().map(|item|&item.vis).collect();
 
     let ret = quote::quote!(
@@ -90,7 +95,12 @@ fn impl_for_new_struct_setter(st:&syn::DeriveInput)->syn::Result<proc_macro2::To
 
     let fields = get_struct_fields(st)?;
     let names:Vec<_> = fields.iter().map(|item|&item.ident).collect();
-    let types:Vec<_> = fields.iter().map(|item|&item.ty).collect();
+    let types:Vec<_> = fields.iter().map(|item|{
+        match get_inner_type_of_option(&item.ty){
+            Some(t) => t,
+            None => &item.ty,
+        }
+    }).collect();
     let token_stream = quote::quote!(
         impl #new_struct_ident{
             #(
@@ -105,22 +115,71 @@ fn impl_for_new_struct_setter(st:&syn::DeriveInput)->syn::Result<proc_macro2::To
     Ok(token_stream)
 }
 
+fn get_inner_type_of_option(ty:&syn::Type)->Option<&syn::Type>{
+    if let syn::Type::Path(syn::TypePath{
+        path:syn::Path{
+            segments,
+            ..
+        },
+        ..
+    }) = ty{
+        if let Some(op) = segments.last(){
+            if &op.ident.to_string() == "Option"{
+                if let syn::PathSegment{
+                    arguments:syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments{
+                        args,
+                        ..
+                    }),
+                    ..
+                } = op{
+                    if let Some(syn::GenericArgument::Type(t)) = args.first(){
+                        return Some(t);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
 fn impl_build_for_new_struct(st:&syn::DeriveInput)->syn::Result<proc_macro2::TokenStream>{
     let new_struct_name = format!("{}Builder",st.ident.to_string());
     let new_struct_ident = syn::Ident::new(&new_struct_name,st.span());
     let old_struct_ident = &st.ident;
     let fields = get_struct_fields(st)?;
     let names:Vec<_> = fields.iter().map(|item|&item.ident).collect();
+    let types:Vec<_> = fields.iter().map(|item|&item.ty).collect();
+    let mut check_token_stream = proc_macro2::TokenStream::new();
+    let mut propoty_token_stream = proc_macro2::TokenStream::new();
+    for (ident,ty) in names.iter().zip(types.iter()){
+        if let Some(_t) = get_inner_type_of_option(ty){
+            if let Some(ident) = ident{
+                propoty_token_stream.extend(quote::quote!(
+                    #ident:self.#ident.clone(),
+                ));
+            }
+            continue;
+        }
+        if let Some(ident) = ident{
+            check_token_stream.extend(quote::quote!(
+                if self.#ident.is_none(){
+                    let err_msg = format!("{} is need",stringify!(#ident));
+                    return std::result::Result::Err(err_msg.into());
+                }
+            ));
+            propoty_token_stream.extend(quote::quote!(
+                #ident:self.#ident.clone().unwrap(),
+            ));
+        }
+        
+    }
     let res = quote::quote!(
         impl #new_struct_ident{
             pub fn build(&self)->std::result::Result<#old_struct_ident,std::boxed::Box<dyn std::error::Error>>{
-                #(if self.#names.is_none(){
-                    let err_msg = format!("{} is need", stringify!(#names));
-                    return std::result::Result::Err(err_msg.into());
-                };)*
-                
+                #check_token_stream
                 let instance = #old_struct_ident{
-                    #(#names:self.#names.clone().unwrap(),)*
+                    #propoty_token_stream
                 };
                 std::result::Result::Ok(instance)
             }
