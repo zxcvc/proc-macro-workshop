@@ -8,10 +8,9 @@
 use derive_builder::Builder;
 
 #[derive(Builder)]
-struct A{
-    pub name:String,
-    s:Option<String>,
-    a:i32,
+pub struct Command {
+    #[builder(each = "arg")]
+    args: Vec<String>,
 }
-fn main() {
-}
+
+fn main() {}
