@@ -20,4 +20,11 @@ pub struct Field {
     name: &'static str,
     bitmask: u8,
 }
-fn main() {}
+fn main() {
+    let f = Field {
+        name: "F",
+        bitmask: 0b00011100,
+    };
+
+    println!("{:?}",f);
+}
