@@ -59,7 +59,8 @@ fn get_field(
     }
 }
 
-fn get_inner_type(ty: &syn::Type) -> Vec<String> {
+fn get_inner_type(ty: &syn::Type,is_on_first:bool) -> Vec<String> {
+    // eprintln!("{:#?}",ty);
     let mut res = vec![];
     if let syn::Type::Path(syn::TypePath {
         path: syn::Path { segments, .. },
@@ -67,27 +68,56 @@ fn get_inner_type(ty: &syn::Type) -> Vec<String> {
     }) = ty
     {
         if let Some(t) = segments.last() {
-            if let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+            if let syn::PathArguments::None = t.arguments{
+                if !is_on_first{
+                    res.push(t.ident.to_string());
+                }
+            }else if let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
                 args,
                 ..
             }) = &t.arguments
             {
-                let iter = args.iter().map(|it| it.to_token_stream().to_string());
-                res.extend(iter);
+                // let iter = args.iter().map(|it| it.to_token_stream().to_string());
+                // res.extend(iter);
+                // if let Some(arg) = args.first(){
+                //     if let syn::GenericArgument::Type(t) = arg{
+                //         return get_inner_type(t);
+                //     }
+                // }
+                for item in args{
+                        if let syn::GenericArgument::Type(t) = item{
+                            res.extend( get_inner_type(t,false))
+                        }
+                }
             }
         }
     }
     res
 }
 
+fn get_real_name_of_type(ty:&syn::Type)->String{
+    if let syn::Type::Path(syn::TypePath{
+        path:syn::Path{
+            segments,
+            ..
+        },
+        ..
+    }) = ty{
+        if let Some(seg) = segments.last(){
+            return seg.ident.to_string();
+        }
+    }
+    "".to_string()
+}
+
 fn only_in_phantom<'a>(ty: String, tys: &Vec<&syn::Type>) -> bool {
     for item in tys {
-        let res = get_inner_type(item);
-        let type_str = item.to_token_stream().to_string();
+        let res = get_inner_type(item,true);
+        let type_str = get_real_name_of_type(item);
         if type_str == ty {
             return false;
         }
-        if res.contains(&ty) && (ty == "PhantomData" || ty.ends_with("::PhantomData")) {
+        if res.contains(&ty) && "PhantomData" != type_str {
             return false;
         }
     }

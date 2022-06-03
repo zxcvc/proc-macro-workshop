@@ -16,11 +16,13 @@
 use derive_debug::CustomDebug;
 
 #[derive(CustomDebug)]
-pub struct Field<T> {
+pub struct Field<T,U> {
     // value: T,
     #[debug = "0b{:08b}"]
     bitmask: u8,
-    s:std::marker::PhantomData<T>
+    s:std::marker::PhantomData<T>,
+    ss:Box<T>,
+    f:Box<Vec<U>>
 }
 fn main() {
     // let f = Field {
